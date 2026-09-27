@@ -12,12 +12,6 @@ It is delivered as an end-to-end **smoke test** — a short, hermetic run that p
 the full pipeline (HF checkpoint → Megatron conversion → LoRA → training loop →
 checkpoint) executes without errors on one NVIDIA H200.
 
-> **On the name.** The original ask was "Gemma 4 12B". There is **no 12B in
-> Gemma 4** (it ships as 26B‑A4B MoE / 31B dense); **12B is a Gemma 3 size**, so
-> this targets `google/gemma-3-12b`. Gemma‑3‑12B is a **multimodal**
-> (`Gemma3ForConditionalGeneration`) model, so it is trained through
-> Megatron-Bridge's vision‑language (VLM) path. See [docs/DESIGN.md](docs/DESIGN.md).
-
 ---
 
 ## Highlights
