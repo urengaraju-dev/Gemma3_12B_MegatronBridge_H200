@@ -1,93 +1,139 @@
-# Gemma3_12B_MegatronBridge_H200
+# Gemma-3-12B LoRA Finetuning on Megatron-Bridge (H200)
 
+![Framework](https://img.shields.io/badge/Megatron--Bridge-0.6.1-76B900)
+![Container](https://img.shields.io/badge/NeMo-26.08-76B900)
+![CUDA](https://img.shields.io/badge/CUDA-13-76B900)
+![GPU](https://img.shields.io/badge/GPU-1%C3%97%20H200%20(143%20GB)-76B900)
+![Status](https://img.shields.io/badge/smoke%20test-passing-brightgreen)
 
+A reproducible, single-GPU **LoRA / PEFT finetuning pipeline for Gemma-3-12B**
+built on **[NVIDIA Megatron-Bridge](https://github.com/NVIDIA-NeMo/Megatron-Bridge)**.
+It is delivered as an end-to-end **smoke test** — a short, hermetic run that proves
+the full pipeline (HF checkpoint → Megatron conversion → LoRA → training loop →
+checkpoint) executes without errors on one NVIDIA H200.
 
-## Getting started
+> **On the name.** The original ask was "Gemma 4 12B". There is **no 12B in
+> Gemma 4** (it ships as 26B‑A4B MoE / 31B dense); **12B is a Gemma 3 size**, so
+> this targets `google/gemma-3-12b`. Gemma‑3‑12B is a **multimodal**
+> (`Gemma3ForConditionalGeneration`) model, so it is trained through
+> Megatron-Bridge's vision‑language (VLM) path. See [docs/DESIGN.md](docs/DESIGN.md).
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+---
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+## Highlights
 
-## Add your files
+- **Real weight conversion.** Loads the genuine 12.3B‑parameter checkpoint and
+  converts HF → Megatron via `AutoBridge` (not random init).
+- **LoRA adapters** on all linear projections (`linear_qkv`, `linear_proj`,
+  `linear_fc1`, `linear_fc2`).
+- **Hermetic.** Synthetic in-memory dataset — no dataset download, mirroring the
+  framework's own CI smoke test.
+- **Single H200.** `TP=PP=CP=1`, bf16, fits comfortably in 143 GB.
+- **Verified.** loss 4.484 → 3.516 → 2.324 over 3 steps, checkpoint saved.
+  ([docs/results/smoke_run.log](docs/results/smoke_run.log))
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+## Repository layout
 
 ```
-cd existing_repo
-git remote add origin https://gitlab-master.nvidia.com/flipkartgroup/gemma3_12b_megatronbridge_h200.git
-git branch -M main
-git push -uf origin main
+.
+├── README.md                     # this file
+├── LICENSE                       # Apache-2.0
+├── CHANGELOG.md
+├── CONTRIBUTING.md
+├── Makefile                      # make setup / smoke / clean
+├── configs/
+│   └── smoke.env                 # tunable knobs (image, model ids, seq, iters)
+├── docs/
+│   ├── DESIGN.md                 # technical decisions & verified facts
+│   └── results/
+│       └── smoke_run.log         # curated evidence of a passing run
+├── scripts/
+│   ├── setup.sh                  # provision container + weights
+│   └── run_smoke.sh              # launch the smoke test
+└── src/
+    └── train_gemma3_vl_12b_lora_smoke.py   # the pipeline
 ```
 
-## Integrate with your tools
+## Requirements
 
-- [ ] [Set up project integrations](https://gitlab-master.nvidia.com/flipkartgroup/gemma3_12b_megatronbridge_h200/-/settings/integrations)
+| Component | Version / value |
+|---|---|
+| GPU | 1× NVIDIA H200 (143 GB) — any ≥ 48 GB CUDA-13 GPU should work for LoRA |
+| Container runtime | Docker with the NVIDIA runtime (GPU visible in containers) |
+| Container image | `nvcr.io/nvidia/nemo:26.08` (Megatron-Bridge 0.6.1, MCore 0.19.1, CUDA 13) |
+| HF access | A HuggingFace token whose account **accepted the Gemma license** at <https://huggingface.co/google/gemma-3-12b-pt> |
 
-## Collaborate with your team
+## Quickstart
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
+```bash
+# 0. Provide an HF token (Gemma license accepted)
+echo "hf_xxxxxxxx" > ~/.hf_token && chmod 600 ~/.hf_token   # or: export HF_TOKEN=...
 
-## Test and Deploy
+# 1. Provision: pull the container, download weights, start the container
+bash scripts/setup.sh
 
-Use the built-in continuous integration in GitLab.
+# 2. Run the LoRA smoke test (3 iterations on synthetic data)
+bash scripts/run_smoke.sh
+```
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+Or with `make`:
 
-***
+```bash
+make setup     # == scripts/setup.sh
+make smoke     # == scripts/run_smoke.sh
+make clean     # remove the container and local run artifacts
+```
 
-# Editing this README
+## What the pipeline does
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+`src/train_gemma3_vl_12b_lora_smoke.py`:
 
-## Suggestions for a good README
+1. Builds the config from Megatron-Bridge's VLM PEFT base (`_peft_common_vlm`)
+   and attaches a **LoRA** adapter (`default_peft_config("lora")`).
+2. Builds the **12B multimodal provider** from the cached checkpoint via
+   `AutoBridge.from_hf_pretrained(...).to_megatron_provider(load_weights=False)`,
+   set to `TP=1 / PP=1 / CP=1`, bf16, `seq_length=512`.
+3. Loads the **real 12B weights** by pointing `checkpoint.pretrained_checkpoint`
+   at the local HF snapshot (Megatron-Bridge converts HF → Megatron on load;
+   PEFT requires a real base checkpoint).
+4. Feeds a **synthetic VLM dataset** (`MockEnergonHFProvider`) so no data is
+   downloaded.
+5. Runs `finetune(cfg, vlm_step.forward_step)` for 3 iterations and writes a
+   `torch_dist` checkpoint.
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+## Configuration
 
-## Name
-Choose a self-explaining name for your project.
+Tunables live in [`configs/smoke.env`](configs/smoke.env) and are read from the
+environment by the trainer (`GEMMA_MODEL_ID`, `GEMMA_PROCESSOR_ID`,
+`SMOKE_SEQ_LEN`, `SMOKE_TRAIN_ITERS`, `SMOKE_OUT_DIR`). Override per-run, e.g.:
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+```bash
+docker exec -e SMOKE_TRAIN_ITERS=10 -e SMOKE_SEQ_LEN=1024 mbridge \
+  torchrun --nproc-per-node=1 src/train_gemma3_vl_12b_lora_smoke.py
+```
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+## From smoke test to real training
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+- **More steps / schedule:** raise `SMOKE_TRAIN_ITERS`, restore
+  `lr_warmup_iters`, set a real `global_batch_size` with gradient accumulation.
+- **Real data:** replace the mock with the shipped recipe dataset — the official
+  single-GPU recipe `gemma3_vl_12b_peft_1gpu_h100_bf16_config("lora")` uses the
+  `cord_v2` image+text dataset — or point it at your own HF/local VLM source.
+- **DoRA instead of LoRA:** change `default_peft_config("lora")` → `("dora")`.
+- **Full SFT:** set `peft=None` and use the `gemma3_vl_12b_sft_4gpu_...` recipe
+  (multi-GPU; full 12B optimizer state does not fit one H200).
+- **FP8 training:** set `mixed_precision="bf16_with_fp8_current_scaling_mixed"`.
+- **Merge adapters:** `examples/peft/merge_lora.py` inside the container.
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+## References
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+- Megatron-Bridge — <https://github.com/NVIDIA-NeMo/Megatron-Bridge>
+- NeMo Framework container — `nvcr.io/nvidia/nemo:26.08`
+- Gemma 3 (base) — <https://huggingface.co/google/gemma-3-12b-pt>
+- Gemma 3 (instruct) — <https://huggingface.co/google/gemma-3-12b-it>
 
 ## License
-For open source projects, say how it is licensed.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+Apache-2.0 — see [LICENSE](LICENSE). Gemma model weights are governed by the
+[Gemma Terms of Use](https://ai.google.dev/gemma/terms); you must accept them on
+Hugging Face to download the checkpoints.

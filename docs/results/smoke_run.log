@@ -1,0 +1,36 @@
+# Gemma-3-12B LoRA smoke test — verified run (single NVIDIA H200)
+# Container: nvcr.io/nvidia/nemo:26.08  |  Megatron-Bridge 0.6.1  |  2026-09-27
+# Command:  torchrun --nproc-per-node=1 src/train_gemma3_vl_12b_lora_smoke.py
+# (curated excerpt — warnings elided for readability)
+
+[smoke] pretrained_checkpoint (local HF snapshot) = /hf_cache/hub/models--google--gemma-3-12b-pt/snapshots/295efb63d01a7017928f273a94ebb86105c9526f
+[smoke] config built OK:
+   model provider: Gemma3VLModelProvider
+   peft: LoRA | target_modules: ['linear_qkv', 'linear_proj', 'linear_fc1', 'linear_fc2']
+   vocab_size: 262208 | num_layers: 48 | hidden: 3840
+   seq_length: 512 | train_iters: 3 | gbs/mbs: 1 1
+
+loading HuggingFace-format checkpoint from /hf_cache/hub/models--google--gemma-3-12b-pt/snapshots/295efb63d01a7017928f273a94ebb86105c9526f
+> number of parameters on (tensor, pipeline) model parallel rank (0, 0): 12300571248
+
+# LoRA adapters inserted on every transformer block, e.g.:
+#   module.language_model.decoder.layers.0.self_attention.linear_qkv.adapter.linear_in.weight
+#   module.language_model.decoder.layers.0.self_attention.linear_proj.adapter.linear_out.weight
+#   module.language_model.decoder.layers.0.mlp.linear_fc1.adapter.linear_in.weight
+#   module.language_model.decoder.layers.0.mlp.linear_fc2.adapter.linear_out.weight
+
+[after model, optimizer, and learning rate scheduler are built]
+> building train, validation, and test datasets ...
+ > datasets target sizes (minimum size):
+    train:      3
+    validation: 0
+    test:       0
+
+ iteration      1/       3 | consumed samples:      1 | elapsed time per iteration (ms): 9018.3 | learning rate: 7.750000E-05 | global batch size:  1 | lm loss: 4.483500E+00 | grad norm: 67.640 | number of nan iterations: 0
+ iteration      2/       3 | consumed samples:      2 | elapsed time per iteration (ms):  339.9 | learning rate: 3.250000E-05 | global batch size:  1 | lm loss: 3.516213E+00 | grad norm: 162.779 | number of nan iterations: 0
+ iteration      3/       3 | consumed samples:      3 | elapsed time per iteration (ms):  340.3 | learning rate: 1.000000E-05 | global batch size:  1 | lm loss: 2.324210E+00 | grad norm: 59.232 | number of nan iterations: 0
+
+saving checkpoint at iteration       3 to /workspace/outputs/gemma3vl_12b_lora_smoke/checkpoints in torch_dist format
+  successfully saved checkpoint from iteration       3 to /workspace/outputs/gemma3vl_12b_lora_smoke/checkpoints [ t 1/1, p 1/1 ]
+[after training is done] datetime: 2026-09-27 09:04:36
+[smoke] DONE — pipeline ran end-to-end with no errors.
